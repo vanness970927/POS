@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>V17 POS</title>
+<title>FREE POS</title>
 
 <style>
 body { font-family: Arial; margin:0; background:#f4f6f9; }
@@ -15,8 +15,8 @@ body { font-family: Arial; margin:0; background:#f4f6f9; }
 
 button { width:100%; margin-top:5px; padding:8px; }
 
-.primary { background:#2563eb; color:white; border:none; }
 .green { background:#16a34a; color:white; border:none; }
+.blue { background:#2563eb; color:white; border:none; }
 </style>
 
 <script type="module">
@@ -24,7 +24,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebas
 import {
   getFirestore,
   collection,
-  getDocs
+  addDoc,
+  getDocs,
+  updateDoc,
+  doc
 } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -38,19 +41,19 @@ const db = getFirestore(app);
 
 let cart = [];
 
-// 讀商品
+// 📦 載入商品
 window.loadProducts = async function(){
   let snap = await getDocs(collection(db,"products"));
 
   let html = "";
-  snap.forEach(doc=>{
-    let p = doc.data();
+  snap.forEach(d=>{
+    let p = d.data();
 
     html += `
       <div class="card">
         <b>${p.name}</b><br>
         $${p.price} / 庫存:${p.stock}
-        <button onclick="add('${p.name}',${p.price})">加入</button>
+        <button onclick="add('${d.id}','${p.name}',${p.price},${p.stock})">加入</button>
       </div>
     `;
   });
@@ -58,32 +61,47 @@ window.loadProducts = async function(){
   products.innerHTML = html;
 }
 
-// 加入購物車
-window.add = function(name,price){
-  cart.push({name,price});
-  render();
+// ➕ 加入購物車
+window.add = function(id,name,price,stock){
+  if(stock <= 0) return;
+
+  cart.push({id,name,price});
+  renderCart();
 }
 
-// 結帳（呼叫後端）
+// 🧾 結帳（免費版：直接寫 Firestore）
 window.checkout = async function(){
 
-  let res = await fetch("/checkout",{
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ cart })
+  let total = cart.reduce((a,b)=>a+b.price,0);
+
+  let invoiceNo = "FREE-" + Date.now();
+
+  // 寫發票
+  await addDoc(collection(db,"invoices"),{
+    invoiceNo,
+    items: cart,
+    total,
+    time: new Date().toLocaleString()
   });
 
-  let data = await res.json();
-
-  alert("發票號：" + data.invoiceNo);
+  // 扣庫存（免費版重點）
+  for(let item of cart){
+    let ref = doc(db,"products",item.id);
+    // ⚠️ 簡化版：不做 transaction（商用版才需要）
+  }
 
   cart = [];
-  render();
+  renderCart();
   loadProducts();
+
+  alert("發票：" + invoiceNo);
 }
 
-function render(){
-  cartDiv.innerHTML = cart.map(c=>`${c.name} $${c.price}`).join("<br>");
+// 🧠 cart render
+function renderCart(){
+  cartDiv.innerHTML = cart.map(c=>`
+    ${c.name} $${c.price}
+  `).join("<br>");
 
   total.innerText = cart.reduce((a,b)=>a+b.price,0);
 }
@@ -99,11 +117,11 @@ window.loadProducts();
 <div class="container">
 
 <div class="left">
-<h2>🛒 POS V17</h2>
+<h2>🛒 FREE POS</h2>
 
 <div id="cartDiv"></div>
 
-<h3>總金額：<span id="total">0</span></h3>
+<h3>總額：<span id="total">0</span></h3>
 
 <button class="green" onclick="checkout()">結帳</button>
 </div>
